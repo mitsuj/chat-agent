@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 import uuid
 import requests
-from utils.message_store import MessageStore
+from utils.mongodb_message_store import MongoDBMessageStore
 
 
 def get_available_ollama_models():
@@ -37,8 +37,8 @@ def chat_interface(user_name, is_admin=False):
         is_admin (bool): Whether the current user is an admin
     """
 
-    # Initialize the message store
-    message_store = MessageStore()
+    # Initialize the MongoDB message store
+    message_store = MongoDBMessageStore()
 
     # Initialize session state
     if "messages" not in st.session_state:
@@ -85,6 +85,17 @@ def chat_interface(user_name, is_admin=False):
             st.session_state.messages = []
             st.rerun()
 
+        # Admin Workspace (moved to the top, right after New Chat button)
+        if is_admin:
+            st.sidebar.divider()
+            st.sidebar.subheader("Admin Workspace")
+
+            if st.sidebar.button("Knowledge", use_container_width=True):
+                st.session_state.admin_view = "knowledge"
+
+            if st.sidebar.button("Prompts", use_container_width=True):
+                st.session_state.admin_view = "prompts"
+
         st.sidebar.divider()
 
         # Chat History Section
@@ -121,28 +132,17 @@ def chat_interface(user_name, is_admin=False):
                         st.rerun()
                     st.sidebar.caption(f"{timestamp}")
 
-        # Admin Workspace (if applicable)
-        if is_admin:
-            st.sidebar.divider()
-            st.sidebar.subheader("Admin Workspace")
-
-            if st.sidebar.button("View All Users", use_container_width=True):
-                st.session_state.admin_view = "users"
-
-            if st.sidebar.button("System Statistics", use_container_width=True):
-                st.session_state.admin_view = "stats"
-
     # Handle admin views if selected
-    if is_admin and st.session_state.get("admin_view") == "users":
-        st.subheader("User Management")
-        st.write("User list would appear here")
+    if is_admin and st.session_state.get("admin_view") == "knowledge":
+        st.subheader("Knowledge Management")
+        st.write("Knowledge base management would appear here")
         if st.button("Back to Chat"):
             st.session_state.admin_view = None
             st.rerun()
 
-    elif is_admin and st.session_state.get("admin_view") == "stats":
-        st.subheader("System Statistics")
-        st.write("System statistics would appear here")
+    elif is_admin and st.session_state.get("admin_view") == "prompts":
+        st.subheader("Prompt Management")
+        st.write("Prompt management interface would appear here")
         if st.button("Back to Chat"):
             st.session_state.admin_view = None
             st.rerun()

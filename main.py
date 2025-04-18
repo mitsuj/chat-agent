@@ -18,7 +18,8 @@ def main():
         # Add logout button to sidebar
         if st.sidebar.button("Logout"):
             authenticator.logout()
-            st.experimental_rerun()
+            st.session_state.clear()
+            st.rerun()
 
         # Your main application content
         # st.title("Chat Agent")
