@@ -1,0 +1,1 @@
+[{"role": "user", "content": "hi", "timestamp": "03:32:29", "user": "John Smith"}, {"role": "assistant", "content": "You said: hi", "timestamp": "03:32:29", "user": "Assistant"}, {"role": "user", "content": "hi", "timestamp": "03:32:46", "user": "John Smith"}, {"role": "assistant", "content": "You said: hi", "timestamp": "03:32:46", "user": "Assistant"}]
