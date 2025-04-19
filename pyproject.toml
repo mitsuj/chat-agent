@@ -9,4 +9,5 @@ dependencies = [
     "requests>=2.32.3",
     "streamlit>=1.44.1",
     "streamlit-authenticator>=0.4.2",
+    "streamlit-extras>=0.6.0",
 ]

@@ -1,8 +1,13 @@
-import streamlit as st
-from datetime import datetime
+import json
 import uuid
+from datetime import datetime
+
 import requests
+import streamlit as st
+from streamlit_extras.stateful_chat import chat
+
 from utils.mongodb_message_store import MongoDBMessageStore
+from utils.mongodb_prompt_store import MongoDBPromptStore
 
 
 def get_available_ollama_models():
@@ -39,6 +44,7 @@ def chat_interface(user_name, is_admin=False):
 
     # Initialize the MongoDB message store
     message_store = MongoDBMessageStore()
+    prompt_store = MongoDBPromptStore()
 
     # Initialize session state
     if "messages" not in st.session_state:
@@ -56,6 +62,19 @@ def chat_interface(user_name, is_admin=False):
 
     if "selected_model" not in st.session_state:
         st.session_state.selected_model = "llama3"
+
+    # Add states for command handling
+    if "show_command_dropdown" not in st.session_state:
+        st.session_state.show_command_dropdown = False
+
+    if "input_value" not in st.session_state:
+        st.session_state.input_value = ""
+
+    if "selected_command" not in st.session_state:
+        st.session_state.selected_command = None
+
+    # Load available commands for dropdown
+    all_prompts = prompt_store.get_all_prompts()
 
     # Create header with model selection dropdown
     col1, col2 = st.columns([3, 1])
@@ -142,7 +161,73 @@ def chat_interface(user_name, is_admin=False):
 
     elif is_admin and st.session_state.get("admin_view") == "prompts":
         st.subheader("Prompt Management")
-        st.write("Prompt management interface would appear here")
+
+        # Create tabs for prompt management
+        tab1, tab2, tab3 = st.tabs(["Create Prompt", "View Prompts", "Import/Export"])
+
+        # TAB 1: Create Prompt
+        with tab1:
+            with st.form("create_prompt_form"):
+                title = st.text_input("Prompt Title")
+
+                # Show the command format below the title
+                if title:
+                    command = "/" + title.lower().replace(" ", "-")
+                    st.caption(f"Command: {command}")
+
+                content = st.text_area("Prompt Content", height=200)
+
+                submitted = st.form_submit_button("Save Prompt")
+
+                if submitted and title and content:
+                    command = prompt_store.save_prompt(title, content)
+                    st.success(f"Prompt saved! Use {command} in chat.")
+
+        # TAB 2: View Prompts
+        with tab2:
+            prompts = prompt_store.get_all_prompts()
+
+            if not prompts:
+                st.info("No prompts available")
+            else:
+                for prompt in prompts:
+                    with st.expander(f"{prompt['title']} ({prompt['command']})"):
+                        st.text_area(
+                            "Content", prompt["content"], disabled=True, height=100
+                        )
+                        st.caption(
+                            f"Last updated: {prompt.get('last_updated', 'Unknown')}"
+                        )
+
+                        if st.button("Delete", key=f"delete_{prompt['command']}"):
+                            prompt_store.delete_prompt(prompt["command"])
+                            st.rerun()
+
+        # TAB 3: Import/Export
+        with tab3:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.subheader("Export Prompts")
+                export_data = prompt_store.export_prompts_to_json()
+                st.download_button(
+                    label="Download Prompts as JSON",
+                    data=export_data,
+                    file_name="prompts_export.json",
+                    mime="application/json",
+                )
+
+            with col2:
+                st.subheader("Import Prompts")
+                uploaded_file = st.file_uploader("Upload JSON file", type=["json"])
+                if uploaded_file is not None:
+                    try:
+                        json_str = uploaded_file.getvalue().decode("utf-8")
+                        count = prompt_store.import_prompts_from_json(json_str)
+                        st.success(f"Successfully imported {count} prompts!")
+                    except Exception as e:
+                        st.error(f"Error importing prompts: {str(e)}")
+
         if st.button("Back to Chat"):
             st.session_state.admin_view = None
             st.rerun()
@@ -158,8 +243,133 @@ def chat_interface(user_name, is_admin=False):
                     st.write(f"{message['content']}")
                     st.caption(f"{message['timestamp']} - {message['user']}")
 
-            if prompt := st.chat_input("What would you like to ask?"):
-                # Add user message
+            # Create a placeholder for the command dropdown
+            command_dropdown = st.empty()
+
+            # Get user input
+            user_input = st.chat_input(
+                "Type / to see commands or enter your message:",
+                key="chat_input",
+            )
+
+            # Show command dropdown if user just typed "/"
+            if user_input and user_input == "/":
+                st.session_state.show_command_dropdown = True
+                st.session_state.input_value = user_input
+                st.rerun()
+
+            # Display command dropdown if needed
+            if st.session_state.show_command_dropdown:
+                with command_dropdown:
+                    command_options = [
+                        f"{p['command']} - {p['title']}" for p in all_prompts
+                    ]
+                    if command_options:
+                        selected = st.selectbox(
+                            "Select a command:",
+                            options=command_options,
+                            key="command_selector",
+                        )
+
+                        if st.button("Use Command"):
+                            # Extract just the command part (before the space)
+                            selected_command = selected.split(" - ")[0]
+                            stored_prompt = prompt_store.get_prompt_by_command(
+                                selected_command
+                            )
+                            if stored_prompt:
+                                # Store the selected command for processing
+                                st.session_state.selected_command = stored_prompt[
+                                    "content"
+                                ]
+                                st.session_state.show_command_dropdown = False
+                                # Force a rerun to reset the UI
+                                st.rerun()
+                    else:
+                        st.write("No commands available")
+
+            # Process user input
+            if user_input:
+                # Reset the command dropdown flag
+                st.session_state.show_command_dropdown = False
+
+                # Check if user input starts with a command
+                if user_input.startswith("/"):
+                    # Extract command part (everything up to first space or end of string)
+                    command = user_input.split(" ")[0]
+                    stored_prompt = prompt_store.get_prompt_by_command(command)
+
+                    if stored_prompt:
+                        # Replace command with content
+                        if " " in user_input:
+                            # If there's additional text after the command, preserve it
+                            remaining_text = user_input[len(command) :].strip()
+                            prompt = f"{stored_prompt['content']} {remaining_text}"
+                        else:
+                            prompt = stored_prompt["content"]
+                    else:
+                        prompt = user_input
+                else:
+                    prompt = user_input
+
+                # Process the message as before
+                user_message = {
+                    "role": "user",
+                    "content": prompt,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "user": user_name,
+                }
+
+                st.session_state.messages.append(user_message)
+
+                with st.chat_message("user"):
+                    st.write(prompt)
+                    st.caption(f"{user_message['timestamp']} - {user_name}")
+
+                # Generate response using Ollama with selected model
+                with st.spinner(f"Thinking with {st.session_state.selected_model}..."):
+                    try:
+                        response = get_ollama_response(
+                            prompt=prompt,
+                            messages=st.session_state.messages,
+                            model=st.session_state.selected_model,
+                        )
+                    except Exception as e:
+                        response = f"Sorry, I encountered an error: {str(e)}"
+
+                # Add assistant message
+                assistant_message = {
+                    "role": "assistant",
+                    "content": response,
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "user": "Assistant",
+                }
+
+                st.session_state.messages.append(assistant_message)
+
+                with st.chat_message("assistant"):
+                    st.write(response)
+                    st.caption(f"{assistant_message['timestamp']} - Assistant")
+
+                # Save updated chat to history
+                st.session_state.chat_history[st.session_state.current_chat_id] = {
+                    "messages": st.session_state.messages,
+                    "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+
+                # Save messages to storage
+                message_store.save_chat(
+                    user_name,
+                    st.session_state.current_chat_id,
+                    st.session_state.chat_history[st.session_state.current_chat_id],
+                )
+
+            # Check if a command was selected from the dropdown
+            elif st.session_state.selected_command:
+                prompt = st.session_state.selected_command
+                st.session_state.selected_command = None  # Reset
+
+                # Process the message
                 user_message = {
                     "role": "user",
                     "content": prompt,
