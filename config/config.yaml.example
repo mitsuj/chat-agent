@@ -1,0 +1,29 @@
+cookie:
+  expiry_days: 30
+  key: your-random-secret-key-here  # Replace with a strong random string
+  name: chat-agent-cookie  # You can customize this cookie name
+credentials:
+  usernames:
+    user1:  # Replace with actual username
+      email: user1@example.com  # Replace with actual email
+      failed_login_attempts: 0  # Will be managed automatically
+      first_name: First  # Replace with actual first name
+      last_name: Last  # Replace with actual last name
+      logged_in: False  # Will be managed automatically
+      password: password123  # Will be hashed automatically
+      roles:  # Optional user roles
+      - admin
+      - editor
+      - viewer
+    user2:  # You can add multiple users
+      email: user2@example.com
+      failed_login_attempts: 0
+      first_name: First2
+      last_name: Last2
+      logged_in: False
+      password: password456
+      roles:
+      - viewer
+pre-authorized:  # Optional - emails that can register without invitation
+  emails:
+  - authorized@example.com
