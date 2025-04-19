@@ -5,8 +5,12 @@ import os
 
 
 def get_authenticator():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "config.yaml")
+    # Update path to point to the config directory
+    config_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "config",
+        "auth_config.yaml",
+    )
     with open(config_path) as file:
         config = yaml.load(file, Loader=SafeLoader)
 
