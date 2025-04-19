@@ -15,11 +15,8 @@ def main():
     if st.session_state.get("authentication_status"):
         st.sidebar.success(f"Logged in as {st.session_state.get('name')}")
 
-        # Add logout button to sidebar
-        if st.sidebar.button("Logout"):
-            authenticator.logout()
-            st.session_state.clear()
-            st.rerun()
+        # Use the authenticator's built-in logout function instead of custom button
+        authenticator.logout("Logout", "sidebar", key="logout_button")
 
         # Your main application content
         # st.title("Chat Agent")
